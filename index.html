@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluid Galaxy Text</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        #ui-container {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            gap: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 40px;
+            border: 1px solid #444;
+            box-shadow: 0 0 40px rgba(50, 100, 255, 0.3);
+            backdrop-filter: blur(8px);
+            align-items: center;
+        }
+
+        input {
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid #666;
+            color: #fff;
+            font-size: 1.2rem;
+            padding: 5px 10px;
+            outline: none;
+            text-align: center;
+            width: 250px;
+            transition: 0.3s;
+            font-family: monospace;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        input:focus {
+            border-bottom-color: #00ffff;
+        }
+
+        button {
+            background: linear-gradient(135deg, #00c6ff, #0072ff);
+            color: #fff;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 25px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 0 20px rgba(0, 114, 255, 0.6);
+            min-width: 120px;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 35px rgba(0, 114, 255, 0.9);
+        }
+
+        /* Styles specifically for the Record button */
+        #recordBtn {
+            background: linear-gradient(135deg, #ff4b4b, #d80000);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        #recordBtn:hover {
+            box-shadow: 0 0 35px rgba(255, 0, 0, 0.7);
+        }
+
+        #recordBtn.recording {
+            animation: pulse 1.5s infinite;
+            background: #fff;
+            color: #d80000;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        /* Indicator dot for recording */
+        .rec-dot {
+            width: 10px;
+            height: 10px;
+            background-color: white;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        #recordBtn.recording .rec-dot {
+            background-color: #d80000;
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            color: #666;
+            pointer-events: none;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info">Fluid Particle System &bull; Drag to Rotate</div>
+
+    <div id="ui-container">
+        <input type="text" id="userText" placeholder="Leave empty for Galaxy" autocomplete="off">
+        <button id="execBtn">Visualize</button>
+        <button id="recordBtn"><span class="rec-dot"></span> REC</button>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration ---
+        const config = {
+            particleCount: 8000, 
+            particleSize: 0.6,
+            morphSpeed: 0.05,
+        };
+
+        // --- Scene Setup ---
+        const scene = new THREE.Scene();
+        // Important: Set background color in Three.js for the video recording to catch it
+        scene.background = new THREE.Color(0x000000); 
+        scene.fog = new THREE.FogExp2(0x000005, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 10, 35);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = true; 
+        controls.autoRotateSpeed = 0.8; 
+
+        // --- Texture (Glow) ---
+        function getTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 32;
+            canvas.height = 32;
+            const ctx = canvas.getContext('2d');
+            const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            gradient.addColorStop(0, 'rgba(255,255,255,1)');
+            gradient.addColorStop(0.2, 'rgba(200,240,255,0.8)');
+            gradient.addColorStop(0.5, 'rgba(40,100,255,0.2)');
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 32, 32);
+            return new THREE.Texture(canvas);
+        }
+        const tex = getTexture();
+        tex.needsUpdate = true;
+
+        // --- Particle System ---
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(config.particleCount * 3);
+        const colors = new Float32Array(config.particleCount * 3);
+        const sizes = new Float32Array(config.particleCount);
+        const randomness = new Float32Array(config.particleCount);
+
+        for (let i = 0; i < config.particleCount * 3; i++) {
+            positions[i] = 0;
+            colors[i] = 1;
+        }
+        for (let i = 0; i < config.particleCount; i++) {
+            sizes[i] = Math.random();
+            randomness[i] = Math.random();
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        geometry.setAttribute('random', new THREE.BufferAttribute(randomness, 1));
+
+        const material = new THREE.PointsMaterial({
+            size: config.particleSize,
+            map: tex,
+            vertexColors: true,
+            transparent: true,
+            opacity: 1,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const particles = new THREE.Points(geometry, material);
+        scene.add(particles);
+
+        // --- Target Logic ---
+        let targetPositions = [];
+        let isGalaxyMode = true;
+
+        function generateGalaxyTargets() {
+            targetPositions = [];
+            isGalaxyMode = true;
+            controls.autoRotateSpeed = 1.0; 
+            
+            const colorAttribute = particles.geometry.attributes.color;
+
+            for (let i = 0; i < config.particleCount; i++) {
+                const radius = Math.random() * 45;
+                const spinAngle = radius * 0.8;
+                const branches = 3; 
+                const branchAngle = (i % branches) * ((Math.PI * 2) / branches);
+                const randomOffset = Math.pow(Math.random(), 3) * (5 - radius * 0.1); 
+
+                const finalAngle = branchAngle + spinAngle + randomOffset;
+
+                const x = Math.cos(finalAngle) * radius;
+                const z = Math.sin(finalAngle) * radius;
+                const y = (Math.random() - 0.5) * (Math.exp(-radius * 0.05) * 6);
+
+                targetPositions.push({ x, y, z });
+
+                const color = new THREE.Color();
+                if (radius < 5) color.setHSL(0.12, 1, 0.8);
+                else if (radius < 20) color.setHSL(0.6, 0.8, 0.6); 
+                else color.setHSL(0.8, 0.8, 0.5); 
+                
+                colorAttribute.setXYZ(i, color.r, color.g, color.b);
+            }
+            colorAttribute.needsUpdate = true;
+        }
+
+        function generateTextTargets(text) {
+            isGalaxyMode = false;
+            controls.autoRotateSpeed = 0.5; 
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const width = 600; 
+            const height = 200;
+            canvas.width = width;
+            canvas.height = height;
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#ffffff';
+            
+            const fontSize = text.length > 10 ? 60 : 100;
+            ctx.font = `bold ${fontSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, width / 2, height / 2);
+
+            const imageData = ctx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+            const textCoords = [];
+            const step = 2; 
+
+            for (let y = 0; y < height; y += step) {
+                for (let x = 0; x < width; x += step) {
+                    const index = (y * width + x) * 4;
+                    if (data[index] > 128) {
+                        textCoords.push({
+                            x: (x - width / 2) * 0.15,
+                            y: -(y - height / 2) * 0.15,
+                            z: 0
+                        });
+                    }
+                }
+            }
+
+            targetPositions = [];
+            const colorAttribute = particles.geometry.attributes.color;
+
+            for (let i = 0; i < config.particleCount; i++) {
+                if (i < textCoords.length) {
+                    targetPositions.push(textCoords[i]);
+                    colorAttribute.setXYZ(i, 0.9, 0.9, 1);
+                } else {
+                    targetPositions.push({
+                        x: (Math.random() - 0.5) * 150,
+                        y: (Math.random() - 0.5) * 150,
+                        z: (Math.random() - 0.5) * 100
+                    });
+                    colorAttribute.setXYZ(i, 0.1, 0.1, 0.2);
+                }
+            }
+            colorAttribute.needsUpdate = true;
+        }
+
+        // --- Interaction ---
+        const input = document.getElementById('userText');
+        const btn = document.getElementById('execBtn');
+        const recBtn = document.getElementById('recordBtn');
+
+        function handleInput() {
+            const text = input.value.trim();
+            if (text === "") generateGalaxyTargets();
+            else generateTextTargets(text);
+        }
+
+        btn.addEventListener('click', handleInput);
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleInput();
+        });
+
+        // --- RECORDING LOGIC (MediaRecorder) ---
+        let mediaRecorder;
+        let recordedChunks = [];
+        let isRecording = false;
+
+        recBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        function startRecording() {
+            // Get the canvas stream
+            const canvas = renderer.domElement;
+            const stream = canvas.captureStream(60); // Record at 60 FPS
+
+            // Initialize MediaRecorder
+            // We check for supported types to ensure cross-browser compatibility
+            const options = { mimeType: 'video/webm; codecs=vp9' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options.mimeType = 'video/webm';
+            }
+            
+            mediaRecorder = new MediaRecorder(stream, options);
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+
+            mediaRecorder.onstop = saveRecording;
+
+            mediaRecorder.start();
+            isRecording = true;
+            
+            // UI Updates
+            recBtn.classList.add('recording');
+            recBtn.innerHTML = '<span class="rec-dot"></span> STOP';
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            isRecording = false;
+            
+            // UI Updates
+            recBtn.classList.remove('recording');
+            recBtn.innerHTML = '<span class="rec-dot"></span> REC';
+        }
+
+        function saveRecording() {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            recordedChunks = []; // Clear buffer
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `galaxy-animation-${Date.now()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 100);
+        }
+
+        generateGalaxyTargets();
+
+        // --- MAIN ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const positions = particles.geometry.attributes.position.array;
+            const rand = particles.geometry.attributes.random.array;
+            const time = Date.now() * 0.001; 
+
+            for (let i = 0; i < config.particleCount; i++) {
+                const i3 = i * 3;
+                const target = targetPositions[i] || {x:0, y:0, z:0};
+                const r = rand[i]; 
+
+                let moveX = 0, moveY = 0, moveZ = 0;
+                
+                if(isGalaxyMode) {
+                    const dist = Math.sqrt(target.x*target.x + target.z*target.z);
+                    const angle = time * (5 / (dist + 5)) + r; 
+                    
+                    moveX = Math.cos(angle + i*0.001) * 0.2 * dist; 
+                    moveZ = Math.sin(angle + i*0.001) * 0.2 * dist; 
+                } 
+                else {
+                    moveX += Math.sin(time * 0.5 + target.y * 0.2) * 0.5;
+                    moveX += Math.sin(time * 2 + r * 10) * 0.1;
+                    moveY += Math.cos(time * 1.5 + r * 10) * 0.1;
+                    moveZ += Math.sin(time * 0.8 + target.x * 0.1) * 1.5; 
+                }
+
+                positions[i3]     += ((target.x + moveX) - positions[i3]) * config.morphSpeed;
+                positions[i3 + 1] += ((target.y + moveY) - positions[i3 + 1]) * config.morphSpeed;
+                positions[i3 + 2] += ((target.z + moveZ) - positions[i3 + 2]) * config.morphSpeed;
+            }
+
+            particles.geometry.attributes.position.needsUpdate = true;
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+
+    </script>
+</body>
+</html>
